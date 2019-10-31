@@ -42,7 +42,8 @@ fetch-arxiv-metadata () {
 
 get-arxiv-id-from-filename () {
     local FORMAT='[0-9]{4}\.[0-9]{5}'
-    sed -E "s/.*(${FORMAT}).*/\1/"
+    local ID=$(sed -E "s/.*(${FORMAT}).*/\1/")
+    [[ $ID =~ $FORMAT ]] && echo "$ID"
 }
 
 get-paper-name () {
@@ -62,20 +63,24 @@ set-pdf-metadata () {
     rm *_original
 }
 
-ID=$(echo $1 | get-arxiv-id-from-filename)
-TRIPLET=$(echo "$ID" | fetch-arxiv-metadata)
-T1=$(echo "$TRIPLET" | sed '1q;d')
-T2=$(echo "$TRIPLET" | sed '2q;d')
-T3=$(echo "$TRIPLET" | sed '3q;d')
-NAME=$(get-paper-name "$T1" "$T2" "$T3" $1)
-FILENAME=${NAME}.${1##*.}
+for f in $@; do
+    ID=$(echo $f | get-arxiv-id-from-filename)
+    if [[ ! -z "$ID" ]]; then
+        TRIPLET=$(echo "$ID" | fetch-arxiv-metadata)
+        T1=$(echo "$TRIPLET" | sed '1q;d')
+        T2=$(echo "$TRIPLET" | sed '2q;d')
+        T3=$(echo "$TRIPLET" | sed '3q;d')
+        NAME=$(get-paper-name "$T1" "$T2" "$T3" $f)
+        FILENAME=${NAME}.${1##*.}
 
-EXIFTOOL=$(which exiftool)
+        EXIFTOOL=$(which exiftool)
 
-# Do operations only when title is not empty
-if [[ ! -z "$T1" ]]; then
-    if [[ -x $EXIFTOOL ]]; then
-        set-pdf-metadata "$T1" "$T2" "$T3" $1
+        # Do operations only when title is not empty
+        if [[ ! -z "$T1" ]]; then
+            if [[ -x $EXIFTOOL ]]; then
+                set-pdf-metadata "$T1" "$T2" "$T3" $f
+            fi
+            mv $f "$FILENAME"
+        fi
     fi
-    mv $1 "$FILENAME"
-fi
+done
