@@ -1,0 +1,81 @@
+#! /bin/bash
+
+# Given an arXiv paper as the first argument,
+# converts the filename ioof the paper and modifies
+# metadata according to title, author, and date information
+# retrieved from arxiv.org
+#
+# Note: the filename should contain arXiv article id.
+#
+#  binaries:
+#   curl, awk, sed, exiftool, tr
+#
+# History: 
+#   Yucheol Jung - 2019/10/31 created
+
+CURL="curl -L -s"
+
+fetch-arxiv-abs () {
+    local ID=$(cat -)
+    local URL_ARXIV=arxiv.org
+    local URL_PAPER_ABS=https://${URL_ARXIV}/abs/$ID
+    $CURL $URL_PAPER_ABS
+}
+
+parse-arxiv-metadata () {
+    # Prints TItle, Last name of the first author, date
+    declare -A EXP_EGREP
+    EXP_EGREP[title]=citation_title
+    EXP_EGREP[author]=citation_author
+    EXP_EGREP[date]=citation_date
+    local EXP_SED_ALL='s/.*content=\"(.+)\".*/\1/'
+    local RAW=$(cat)
+    echo "$RAW" | egrep ${EXP_EGREP[title]} | sed -E $EXP_SED_ALL
+    echo "$RAW" | egrep ${EXP_EGREP[author]} | sed -E $EXP_SED_ALL | sed "s/,//g" | tr '\n' ';'; echo
+    echo "$RAW" | egrep ${EXP_EGREP[date]} | sed -E $EXP_SED_ALL
+}
+
+fetch-arxiv-metadata () {
+    # Fetch ArXiv paper metadata (title, author, data) from the web
+    fetch-arxiv-abs | sed -E 's/>/>\n/g' | parse-arxiv-metadata
+}
+
+get-arxiv-id-from-filename () {
+    local FORMAT='[0-9]{4}\.[0-9]{5}'
+    sed -E "s/.*(${FORMAT}).*/\1/"
+}
+
+get-paper-name () {
+    local TITLE=$(echo $1 | sed -E "s/ /_/g" | cut -c -50)
+    local AUTHOR=$(echo $2 | sed -E "s/,//g" | awk '{print $1}')
+    local YEAR=$(echo $3 | sed -E "s/([0-9]+)\/.*/\1/")
+
+    echo ${YEAR}_${AUTHOR}_${TITLE}
+}
+
+set-pdf-metadata () {
+    local TITLE=$1
+    local AUTHOR=$2
+    local YEAR=$(echo $3 | sed -E "s/([0-9]+)\/.*/\1/")
+
+    exiftool -Title="$TITLE" -Subject="ArXiv:${ID} ($YEAR)" -Author="$AUTHOR" $4 > /dev/null
+    rm *_original
+}
+
+ID=$(echo $1 | get-arxiv-id-from-filename)
+TRIPLET=$(echo "$ID" | fetch-arxiv-metadata)
+T1=$(echo "$TRIPLET" | sed '1q;d')
+T2=$(echo "$TRIPLET" | sed '2q;d')
+T3=$(echo "$TRIPLET" | sed '3q;d')
+NAME=$(get-paper-name "$T1" "$T2" "$T3" $1)
+FILENAME=${NAME}.${1##*.}
+
+EXIFTOOL=$(which exiftool)
+
+# Do operations only when title is not empty
+if [[ ! -z "$T1" ]]; then
+    if [[ -x $EXIFTOOL ]]; then
+        set-pdf-metadata "$T1" "$T2" "$T3" $1
+    fi
+    mv $1 "$FILENAME"
+fi
