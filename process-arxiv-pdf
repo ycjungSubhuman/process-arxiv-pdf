@@ -60,7 +60,7 @@ set-pdf-metadata () {
     local YEAR=$(echo $3 | sed -E "s/([0-9]+)\/.*/\1/")
 
     exiftool -Title="$TITLE" -Subject="ArXiv:${ID} ($YEAR)" -Author="$AUTHOR" $4 > /dev/null
-    rm *_original
+    rm "${4}_original"
 }
 
 for f in $@; do
@@ -71,7 +71,7 @@ for f in $@; do
         T2=$(echo "$TRIPLET" | sed '2q;d')
         T3=$(echo "$TRIPLET" | sed '3q;d')
         NAME=$(get-paper-name "$T1" "$T2" "$T3" $f)
-        FILENAME=${NAME}.${1##*.}
+        FILENAME=$(dirname "$f")/${NAME}.${f##*.}
 
         EXIFTOOL=$(which exiftool)
 
